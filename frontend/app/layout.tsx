@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Feedback Intelligence",
-  description: "Onboard feedback channels for cross-channel product insight.",
+  title: "Rivue — Feedback Intelligence",
+  description: "Signal intelligence for product teams. Connect every feedback channel in one pulse.",
 };
 
 export default function RootLayout({
@@ -13,6 +13,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
