@@ -4,7 +4,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, unquote as url_unquote, urlparse
 
 import requests
 from dotenv import load_dotenv
@@ -108,7 +108,7 @@ def preview_x(url: str = Query(..., min_length=2), days: int = 7) -> dict[str, A
     if not handle:
         raise HTTPException(status_code=400, detail="Could not find an X handle in that URL.")
 
-    bearer = os.getenv("X_API_KEY")
+    bearer = url_unquote(os.getenv("X_API_KEY") or "")
     if not bearer:
         raise HTTPException(status_code=503, detail="X_API_KEY is not configured on the backend.")
 

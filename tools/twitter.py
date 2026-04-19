@@ -3,6 +3,7 @@ import json
 import requests
 from datetime import datetime, timedelta
 from typing import Annotated
+from urllib.parse import unquote
 from agents import function_tool
 from config import X_HANDLE, DEFAULT_DAYS_LOOKBACK
 
@@ -11,7 +12,7 @@ def _get_bearer_token() -> str:
     token = os.getenv("X_API_KEY")
     if not token:
         raise ValueError("X_API_KEY not set in environment")
-    return token
+    return unquote(token)
 
 
 def _get_user_id(handle: str) -> str:

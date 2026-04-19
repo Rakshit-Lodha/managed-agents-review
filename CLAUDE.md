@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Done
 - Core agent built on OpenAI Agents SDK (GPT-4o) with 4 feedback tools
-- Streamlit chat UI with session memory via `SQLiteSession` (persisted in `feedback_agent_memory.db`)
+- Streamlit chat UI with session memory via **Turso** (hosted libsql, replaces local `SQLiteSession`)
 - Tools for Play Store (scraper), App Store (iTunes RSS), YouTube (Data API v3), X/Twitter (API v2)
 - Analysis framework: bugs, UX complaints, feature requests, positive signals, sentiment trend
 - CLI mode for quick testing
@@ -48,6 +48,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - No GitHub — Google + email only
   - Middleware (`frontend/middleware.ts`) guards `/onboarding` — redirects unauthenticated users to `/auth?next=...`
   - Single Supabase project shared across apps — no extra cost
+- **Turso session storage** — `turso_session.py` implements `SessionABC` backed by Turso (hosted libsql)
+  - Replaces `SQLiteSession` which stored conversation history in a local file (not deploy-safe)
+  - One Turso DB, session-scoped by `session_id`. Schema: `agent_sessions` + `agent_messages`
+  - `agent.py` reads `TURSO_URL` + `TURSO_AUTH_TOKEN` from env; `get_session()` returns a `TursoSession`
+  - `libsql-client` added to `requirements.txt`; use `https://` URL scheme (not `libsql://`) for Turso HTTP transport
+- **X bearer token URL-decoding fix** — `tools/twitter.py` and `backend/main.py` now call `unquote()` on the token before use, guarding against tokens copied with `%2F` encoding instead of `/`
 
 ### In Progress
 - **Multi-tenant architecture** — `config.py` is currently hardcoded for ET Money (MVP test app). Needs a `tenants` DB table so multiple companies can onboard independently.

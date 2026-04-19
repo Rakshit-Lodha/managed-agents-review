@@ -1,8 +1,10 @@
 from dotenv import load_dotenv
 load_dotenv()
 import asyncio
-from agents import Agent, Runner, SQLiteSession
+import os
+from agents import Agent, Runner
 from tools import ALL_TOOLS
+from turso_session import TursoSession
 
 SYSTEM_PROMPT = """You are a Feedback Intelligence Agent for a consumer app. You have access to
 tools that pull real user feedback from Google Play Store, Apple App Store, YouTube comments,
@@ -53,9 +55,12 @@ def create_agent() -> Agent:
     )
 
 
-def get_session(session_id: str = "default") -> SQLiteSession:
-    """Get a persistent session for conversation memory."""
-    return SQLiteSession(session_id, "feedback_agent_memory.db")
+def get_session(session_id: str = "default") -> TursoSession:
+    return TursoSession(
+        session_id=session_id,
+        url=os.environ["TURSO_URL"],
+        auth_token=os.environ["TURSO_AUTH_TOKEN"],
+    )
 
 
 async def run_agent(user_message: str, session_id: str = "default") -> str:
