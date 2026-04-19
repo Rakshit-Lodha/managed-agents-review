@@ -67,6 +67,10 @@ body {
   font-family: 'Syne', sans-serif;
 }
 
+a {
+  color: inherit;
+}
+
 /* Noise overlay — adds depth without images */
 body::before {
   content: '';
@@ -83,6 +87,122 @@ body::before {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+/* ─── AUTH ───────────────────────────────────────────────────────────────── */
+.auth-shell {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(0, 255, 209, 0.14), transparent 34%),
+    linear-gradient(180deg, var(--bg), var(--bg2));
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.auth-card {
+  background: rgba(8, 12, 26, 0.84);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 0 80px rgba(0, 255, 209, 0.09);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 520px;
+  padding: 40px;
+  width: 100%;
+}
+
+.auth-logo {
+  color: var(--white);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 34px;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+
+.auth-logo span {
+  color: var(--cyan);
+}
+
+.auth-kicker {
+  color: var(--cyan);
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+
+.auth-card h1 {
+  color: var(--white);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(54px, 8vw, 82px);
+  letter-spacing: 0.02em;
+  line-height: 0.94;
+  margin: 0 0 18px;
+}
+
+.auth-copy,
+.auth-footnote {
+  color: var(--muted);
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.auth-footnote {
+  color: var(--quiet);
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+}
+
+.google-button {
+  align-items: center;
+  background: var(--white);
+  border: 1px solid rgba(240, 237, 232, 0.2);
+  border-radius: 8px;
+  color: var(--bg);
+  display: flex;
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 12px;
+  justify-content: center;
+  min-height: 52px;
+  padding: 14px 18px;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.google-button:hover {
+  box-shadow: 0 0 32px rgba(0, 255, 209, 0.18);
+  transform: translateY(-1px);
+}
+
+.google-button span {
+  align-items: center;
+  background: var(--bg);
+  border-radius: 999px;
+  color: var(--cyan);
+  display: flex;
+  flex: 0 0 auto;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.auth-error {
+  background: var(--red-dim);
+  border: 1px solid rgba(255, 68, 68, 0.22);
+  border-radius: 8px;
+  color: var(--red);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px 14px;
 }
 
 /* ─── LEFT RAIL ───────────────────────────────────────────────────────────── */
