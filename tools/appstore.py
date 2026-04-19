@@ -1,12 +1,16 @@
 import json
 import requests
+from datetime import date, timedelta
 from typing import Annotated
 from agents import function_tool
-from config import APPSTORE_APP_ID, COUNTRY
+from config import APPSTORE_APP_ID, DEFAULT_DAYS_LOOKBACK, COUNTRY
 
 
 @function_tool
 def fetch_appstore_reviews(
+    start_date: Annotated[str, "Start date YYYY-MM-DD. Filters reviews on or after this date."] = "",
+    end_date: Annotated[str, "End date YYYY-MM-DD. Filters reviews on or before this date. Defaults to today."] = "",
+    days: Annotated[int, "Days to look back from today. Used only if start_date is not provided."] = DEFAULT_DAYS_LOOKBACK,
     app_id: Annotated[str, "Apple App Store app ID"] = APPSTORE_APP_ID,
     country: Annotated[str, "Country code (e.g. 'in', 'us')"] = COUNTRY,
 ) -> str:
@@ -25,12 +29,20 @@ def fetch_appstore_reviews(
         data = response.json()
         entries = data["feed"].get("entry", [])
 
+        if start_date:
+            start = date.fromisoformat(start_date)
+            end = date.fromisoformat(end_date) if end_date else date.today()
+        else:
+            end = date.today()
+            start = end - timedelta(days=days)
+
         all_reviews = []
         for entry in entries:
-            # Skip the first entry if it's the app metadata, not a review
             if "im:rating" not in entry:
                 continue
-
+            review_date = date.fromisoformat(entry["updated"]["label"][:10])
+            if not (start <= review_date <= end):
+                continue
             all_reviews.append({
                 "source": "app_store",
                 "author": entry["author"]["name"]["label"],
@@ -41,8 +53,11 @@ def fetch_appstore_reviews(
                 "version": entry["im:version"]["label"],
             })
 
+        period = f"{start.isoformat()} to {end.isoformat()}"
         return json.dumps({
+            "source": "app_store",
             "total_reviews": len(all_reviews),
+            "period": period,
             "app_id": app_id,
             "avg_rating": round(sum(r["rating"] for r in all_reviews) / len(all_reviews), 2) if all_reviews else 0,
             "reviews": all_reviews,

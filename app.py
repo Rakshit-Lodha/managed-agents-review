@@ -1,7 +1,7 @@
 import streamlit as st
 import asyncio
-from agent import create_agent, get_session
-from agents import Runner
+from datetime import datetime, timedelta
+from agent import run_agent
 
 # ── Page config ──────────────────────────────────────────────
 st.set_page_config(
@@ -32,7 +32,20 @@ with st.sidebar:
 
     if st.button("🗑️ Clear Chat"):
         st.session_state.messages = []
+        try:
+            from agent import get_session
+            asyncio.run(get_session(st.session_state.session_id).clear_session())
+        except Exception:
+            pass
         st.rerun()
+
+    st.divider()
+    st.subheader("📅 Date Range")
+    today = datetime.now().date()
+    start_date = st.date_input("From", value=today - timedelta(days=7), max_value=today)
+    end_date = st.date_input("To", value=today, max_value=today)
+    if start_date > end_date:
+        st.warning("Start date must be before end date.")
 
     st.divider()
     st.subheader("📡 Connected Sources")
@@ -79,17 +92,17 @@ if user_input:
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Run agent
+    # Inject date range as context prefix so the agent passes it to tools
+    date_context = f"[Date range: {start_date.isoformat()} to {end_date.isoformat()}] "
+    augmented_input = date_context + user_input
+
+    # Run agent (also triggers summarization if conversation is long)
     with st.chat_message("assistant"):
         with st.spinner("Fetching and analyzing feedback..."):
-            agent = create_agent()
-            session = get_session(st.session_state.session_id)
-
             try:
-                result = asyncio.run(
-                    Runner.run(agent, user_input, session=session)
+                response = asyncio.run(
+                    run_agent(augmented_input, st.session_state.session_id)
                 )
-                response = result.final_output
             except Exception as e:
                 response = f"⚠️ Error running agent: {str(e)}"
 

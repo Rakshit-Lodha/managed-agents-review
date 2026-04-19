@@ -1,7 +1,7 @@
 import os
 import json
 import isodate
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from agents import function_tool
 from googleapiclient.discovery import build
@@ -56,7 +56,9 @@ def _get_comments_for_video(video_id: str, max_comments: int = 50) -> list:
 
 @function_tool
 def fetch_youtube_feedback(
-    days: Annotated[int, "Number of days to look back for videos"] = DEFAULT_DAYS_LOOKBACK,
+    start_date: Annotated[str, "Start date YYYY-MM-DD (UTC). Overrides 'days' when provided."] = "",
+    end_date: Annotated[str, "End date YYYY-MM-DD (UTC). Defaults to today when start_date is set."] = "",
+    days: Annotated[int, "Days to look back from today. Used only if start_date is not provided."] = DEFAULT_DAYS_LOOKBACK,
     handle: Annotated[str, "YouTube channel handle (e.g. '@ETMONEY')"] = YOUTUBE_HANDLE,
     max_comments_per_video: Annotated[int, "Max comments to fetch per video"] = 30,
 ) -> str:
@@ -68,11 +70,24 @@ def fetch_youtube_feedback(
         channel_id = _find_channel_id(handle)
         yt = _get_youtube_client()
 
-        after = (datetime.utcnow() - timedelta(days=days)).isoformat("T") + "Z"
+        if start_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            end_dt = (
+                datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+                if end_date
+                else datetime.now(timezone.utc)
+            )
+        else:
+            end_dt = datetime.now(timezone.utc)
+            start_dt = end_dt - timedelta(days=days)
+
+        after = start_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        before = end_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         search = yt.search().list(
             channelId=channel_id,
             publishedAfter=after,
+            publishedBefore=before,
             type="video",
             order="date",
             part="id",

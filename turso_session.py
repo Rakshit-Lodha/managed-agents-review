@@ -7,6 +7,8 @@ from agents import SessionSettings
 from agents.memory import SessionABC
 from agents import TResponseInputItem
 
+SUMMARY_WINDOW = 40  # keep this many recent items verbatim; older items are summarized
+
 
 def _resolve_limit(limit: int | None, settings: SessionSettings | None) -> int | None:
     if limit is not None:
@@ -15,7 +17,7 @@ def _resolve_limit(limit: int | None, settings: SessionSettings | None) -> int |
 
 
 class TursoSession(SessionABC):
-    """Turso-backed session — drop-in replacement for SQLiteSession."""
+    """Turso-backed session with rolling summarization support."""
 
     session_settings: SessionSettings | None = None
 
@@ -61,35 +63,45 @@ class TursoSession(SessionABC):
             CREATE INDEX IF NOT EXISTS idx_{self.messages_table}_session_id
             ON {self.messages_table} (session_id, id)
             """,
+            """
+            CREATE TABLE IF NOT EXISTS agent_summaries (
+                session_id TEXT PRIMARY KEY,
+                summary_text TEXT NOT NULL,
+                summarized_up_to_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
         ])
 
     async def get_items(self, limit: int | None = None) -> list[TResponseInputItem]:
-        session_limit = _resolve_limit(limit, self.session_settings)
+        window = _resolve_limit(limit, self.session_settings) or SUMMARY_WINDOW
         async with self._make_client() as client:
             await self._ensure_schema(client)
-            if session_limit is None:
-                result = await client.execute(
-                    libsql_client.Statement(
-                        f"SELECT message_data FROM {self.messages_table} WHERE session_id = ? ORDER BY id ASC",
-                        [self.session_id],
-                    )
-                )
-                rows = result.rows
-            else:
-                result = await client.execute(
-                    libsql_client.Statement(
-                        f"SELECT message_data FROM {self.messages_table} WHERE session_id = ? ORDER BY id DESC LIMIT ?",
-                        [self.session_id, session_limit],
-                    )
-                )
-                rows = list(reversed(result.rows))
 
-            items = []
-            for row in rows:
-                try:
-                    items.append(json.loads(row[0]))
-                except json.JSONDecodeError:
-                    continue
+            # Fetch summary if one exists
+            sum_result = await client.execute(
+                libsql_client.Statement(
+                    "SELECT summary_text FROM agent_summaries WHERE session_id = ?",
+                    [self.session_id],
+                )
+            )
+            summary_text = sum_result.rows[0][0] if sum_result.rows else None
+
+            # Fetch last `window` messages
+            msg_result = await client.execute(
+                libsql_client.Statement(
+                    f"SELECT message_data FROM {self.messages_table} WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+                    [self.session_id, window],
+                )
+            )
+            items = [json.loads(row[0]) for row in reversed(msg_result.rows)]
+
+            if summary_text:
+                summary_item = {
+                    "role": "system",
+                    "content": f"[Summary of earlier conversation: {summary_text}]",
+                }
+                return [summary_item] + items  # type: ignore[return-value]
             return items
 
     async def add_items(self, items: list[TResponseInputItem]) -> None:
@@ -152,4 +164,92 @@ class TursoSession(SessionABC):
                     f"DELETE FROM {self.sessions_table} WHERE session_id = ?",
                     [self.session_id],
                 ),
+                libsql_client.Statement(
+                    "DELETE FROM agent_summaries WHERE session_id = ?",
+                    [self.session_id],
+                ),
             ])
+
+    # ── Summarization helpers ─────────────────────────────────
+
+    async def get_message_count(self) -> int:
+        async with self._make_client() as client:
+            await self._ensure_schema(client)
+            result = await client.execute(
+                libsql_client.Statement(
+                    f"SELECT COUNT(*) FROM {self.messages_table} WHERE session_id = ?",
+                    [self.session_id],
+                )
+            )
+            return int(result.rows[0][0]) if result.rows else 0
+
+    async def get_existing_summary(self) -> str | None:
+        async with self._make_client() as client:
+            await self._ensure_schema(client)
+            result = await client.execute(
+                libsql_client.Statement(
+                    "SELECT summary_text FROM agent_summaries WHERE session_id = ?",
+                    [self.session_id],
+                )
+            )
+            return result.rows[0][0] if result.rows else None
+
+    async def get_items_unsummarized(self) -> tuple[list[TResponseInputItem], int]:
+        """Return (items_outside_window_not_yet_summarized, last_id_of_those_items)."""
+        async with self._make_client() as client:
+            await self._ensure_schema(client)
+
+            # ID up to which we already have a summary
+            sum_result = await client.execute(
+                libsql_client.Statement(
+                    "SELECT summarized_up_to_id FROM agent_summaries WHERE session_id = ?",
+                    [self.session_id],
+                )
+            )
+            summarized_up_to_id = int(sum_result.rows[0][0]) if sum_result.rows else 0
+
+            # ID of the oldest message still inside the window
+            boundary_result = await client.execute(
+                libsql_client.Statement(
+                    f"SELECT id FROM {self.messages_table} WHERE session_id = ? "
+                    f"ORDER BY id DESC LIMIT 1 OFFSET {SUMMARY_WINDOW}",
+                    [self.session_id],
+                )
+            )
+            if not boundary_result.rows:
+                return [], 0  # not enough messages to need summarization
+
+            boundary_id = int(boundary_result.rows[0][0])
+            if boundary_id <= summarized_up_to_id:
+                return [], 0  # already summarized up to the current boundary
+
+            msgs_result = await client.execute(
+                libsql_client.Statement(
+                    f"SELECT id, message_data FROM {self.messages_table} "
+                    f"WHERE session_id = ? AND id > ? AND id <= ? ORDER BY id ASC",
+                    [self.session_id, summarized_up_to_id, boundary_id],
+                )
+            )
+            if not msgs_result.rows:
+                return [], 0
+
+            items = [json.loads(row[1]) for row in msgs_result.rows]
+            last_id = int(msgs_result.rows[-1][0])
+            return items, last_id  # type: ignore[return-value]
+
+    async def save_summary(self, summary_text: str, summarized_up_to_id: int) -> None:
+        async with self._make_client() as client:
+            await self._ensure_schema(client)
+            await client.execute(
+                libsql_client.Statement(
+                    """
+                    INSERT INTO agent_summaries (session_id, summary_text, summarized_up_to_id)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(session_id) DO UPDATE SET
+                        summary_text = excluded.summary_text,
+                        summarized_up_to_id = excluded.summarized_up_to_id,
+                        created_at = CURRENT_TIMESTAMP
+                    """,
+                    [self.session_id, summary_text, summarized_up_to_id],
+                )
+            )

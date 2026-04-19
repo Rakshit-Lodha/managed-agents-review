@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from urllib.parse import unquote
 from agents import function_tool
@@ -33,7 +33,9 @@ def _get_user_id(handle: str) -> str:
 
 @function_tool
 def fetch_x_mentions(
-    days: Annotated[int, "Number of days to look back for mentions"] = DEFAULT_DAYS_LOOKBACK,
+    start_date: Annotated[str, "Start date YYYY-MM-DD (UTC). Overrides 'days' when provided."] = "",
+    end_date: Annotated[str, "End date YYYY-MM-DD (UTC). Defaults to today when start_date is set."] = "",
+    days: Annotated[int, "Days to look back from today. Used only if start_date is not provided."] = DEFAULT_DAYS_LOOKBACK,
     handle: Annotated[str, "X/Twitter handle (without @)"] = X_HANDLE,
 ) -> str:
     """Fetch recent X (Twitter) mentions of the brand.
@@ -44,8 +46,16 @@ def fetch_x_mentions(
         bearer = _get_bearer_token()
         user_id = _get_user_id(handle)
 
-        end_time = datetime.utcnow()
-        start_time = end_time - timedelta(days=days)
+        if start_date:
+            start_time = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            end_time = (
+                datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+                if end_date
+                else datetime.now(timezone.utc)
+            )
+        else:
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(days=days)
 
         url = f"https://api.x.com/2/users/{user_id}/mentions"
         headers = {"Authorization": f"Bearer {bearer}"}
@@ -91,11 +101,12 @@ def fetch_x_mentions(
                 "replies": post.get("public_metrics", {}).get("reply_count", 0),
             })
 
+        period = f"{start_time.strftime('%Y-%m-%d')} to {end_time.strftime('%Y-%m-%d')}"
         return json.dumps({
             "source": "x_twitter",
             "handle": handle,
             "total_mentions": len(mentions),
-            "period": f"Last {days} days",
+            "period": period,
             "mentions": mentions,
         }, indent=2)
 

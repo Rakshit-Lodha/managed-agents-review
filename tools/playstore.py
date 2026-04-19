@@ -1,13 +1,17 @@
 import json
+from datetime import date, timedelta
 from typing import Annotated
 from agents import function_tool
 from google_play_scraper import reviews, Sort
-from config import GOOGLE_PLAY_APP_ID, DEFAULT_REVIEW_COUNT, COUNTRY, LANGUAGE
+from config import GOOGLE_PLAY_APP_ID, DEFAULT_REVIEW_COUNT, DEFAULT_DAYS_LOOKBACK, COUNTRY, LANGUAGE
 
 
 @function_tool
 def fetch_playstore_reviews(
-    count: Annotated[int, "Number of reviews to fetch (max 200)"] = DEFAULT_REVIEW_COUNT,
+    start_date: Annotated[str, "Start date YYYY-MM-DD. Filters reviews on or after this date."] = "",
+    end_date: Annotated[str, "End date YYYY-MM-DD. Filters reviews on or before this date. Defaults to today."] = "",
+    days: Annotated[int, "Days to look back from today. Used only if start_date is not provided."] = DEFAULT_DAYS_LOOKBACK,
+    count: Annotated[int, "Number of reviews to fetch before date filtering (max 200)"] = DEFAULT_REVIEW_COUNT,
     app_id: Annotated[str, "Google Play app ID"] = GOOGLE_PLAY_APP_ID,
 ) -> str:
     """Fetch the most recent Google Play Store reviews for the app.
@@ -23,8 +27,18 @@ def fetch_playstore_reviews(
             count=min(count, 200),
         )
 
+        if start_date:
+            start = date.fromisoformat(start_date)
+            end = date.fromisoformat(end_date) if end_date else date.today()
+        else:
+            end = date.today()
+            start = end - timedelta(days=days)
+
         all_reviews = []
         for r in result:
+            review_date = r["at"].date()
+            if not (start <= review_date <= end):
+                continue
             all_reviews.append({
                 "source": "google_play",
                 "author": r["userName"],
@@ -35,8 +49,11 @@ def fetch_playstore_reviews(
                 "thumbs_up": r.get("thumbsUpCount", 0),
             })
 
+        period = f"{start.isoformat()} to {end.isoformat()}"
         return json.dumps({
+            "source": "google_play",
             "total_reviews": len(all_reviews),
+            "period": period,
             "app_id": app_id,
             "avg_rating": round(sum(r["rating"] for r in all_reviews) / len(all_reviews), 2) if all_reviews else 0,
             "reviews": all_reviews,
