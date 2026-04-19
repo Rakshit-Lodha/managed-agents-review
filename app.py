@@ -104,7 +104,9 @@ if user_input:
                     run_agent(augmented_input, st.session_state.session_id)
                 )
             except Exception as e:
+                import traceback
                 response = f"⚠️ Error running agent: {str(e)}"
+                st.error(traceback.format_exc())
 
         st.markdown(response)
 
