@@ -7,6 +7,8 @@ Feedback Intelligence is a SaaS product for aggregating user feedback across pub
 
 The product thesis is cross-channel correlation: the same issue showing up in Play Store reviews, App Store reviews, YouTube comments, and X mentions should be easier to spot, easier to prioritize, and easier to route.
 
+Live app: https://managed-agents-review.onrender.com
+
 ## Current Product Scope
 
 Current channels:
